@@ -1485,5 +1485,168 @@ R.RenderStepped:Connect(function()
         end
     end
 end)
+-- ==================== CHEATER DETECTOR ====================
+C.CheaterDetect = true
+C.CheaterTracer = true
+C.CheaterSpeedLimit = 45
+C.CheaterFlagTime = 10
 
+local CD = {}
+local CD_COLOR = Color3.fromRGB(255, 140, 0)
+
+local function getCD(v)
+    if not CD[v] then
+        local line = Drawing.new("Line")
+        line.Thickness = 2.5
+        line.Color = CD_COLOR
+        line.Visible = false
+        local txt = Drawing.new("Text")
+        txt.Size = 14
+        txt.Center = true
+        txt.Outline = true
+        txt.Color = CD_COLOR
+        txt.Visible = false
+        CD[v] = {
+            line = line, txt = txt, char = nil,
+            lastPos = nil, lastT = os.clock(), spawnT = 0,
+            airTime = 0, speedTime = 0, reasons = {}
+        }
+    end
+    return CD[v]
+end
+
+local function resetCD(d)
+    d.lastPos = nil
+    d.airTime = 0
+    d.speedTime = 0
+end
+
+local function flagCheater(v, d, reason)
+    local now = os.clock()
+    local old = d.reasons[reason]
+    if not old or old < now then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Cheater Detector",
+                Text = v.Name .. " mencurigakan: " .. reason,
+                Duration = 4
+            })
+        end)
+    end
+    d.reasons[reason] = now + C.CheaterFlagTime
+end
+
+P.PlayerRemoving:Connect(function(v)
+    local d = CD[v]
+    if d then
+        d.line:Remove()
+        d.txt:Remove()
+        CD[v] = nil
+    end
+end)
+
+R.RenderStepped:Connect(function()
+    local now = os.clock()
+    local cam = W.CurrentCamera
+    local vp = cam.ViewportSize
+    local bottom = Vector2.new(vp.X / 2, vp.Y)
+
+    for _, v in ipairs(P:GetPlayers()) do
+        if v ~= LP then
+            local d = getCD(v)
+            local char = v.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+            if C.CheaterDetect and hrp and hum and hum.Health > 0 then
+                if d.char ~= char then
+                    d.char = char
+                    d.spawnT = now
+                    resetCD(d)
+                end
+
+                local dt = now - d.lastT
+                d.lastT = now
+                local pos = hrp.Position
+                local graceOver = (now - d.spawnT) > 2
+
+                if d.lastPos and dt > 0 and dt < 0.5 and graceOver and not hum.SeatPart then
+                    local delta = pos - d.lastPos
+
+                    -- Teleport
+                    if delta.Magnitude > 50 and dt < 0.2 then
+                        flagCheater(v, d, "Teleport")
+                    end
+
+                    -- Speed (horizontal)
+                    local hSpeed = Vector3.new(delta.X, 0, delta.Z).Magnitude / dt
+                    if hSpeed > C.CheaterSpeedLimit and delta.Magnitude < 50 then
+                        d.speedTime = d.speedTime + dt
+                        if d.speedTime > 0.5 then flagCheater(v, d, "Speed") end
+                    else
+                        d.speedTime = math.max(0, d.speedTime - dt)
+                    end
+
+                    -- Fly
+                    local vy = delta.Y / dt
+                    if hum.FloorMaterial == Enum.Material.Air and vy > -5 then
+                        d.airTime = d.airTime + dt
+                        if d.airTime > 2.5 then flagCheater(v, d, "Fly") end
+                    else
+                        d.airTime = 0
+                    end
+                end
+                d.lastPos = pos
+
+                -- Hitbox (skip kalau hitbox expander lu sendiri nyala)
+                if not C.HitboxExpand then
+                    local head = char:FindFirstChild("Head")
+                    if head then
+                        local s = head.Size
+                        if math.max(s.X, s.Y, s.Z) > 2.6 then
+                            flagCheater(v, d, "Hitbox")
+                        end
+                    end
+                end
+            else
+                d.lastT = now
+                if not hrp then resetCD(d) end
+            end
+
+            -- Kumpulin alasan yang masih aktif
+            local active = {}
+            for reason, expiry in pairs(d.reasons) do
+                if expiry > now then
+                    table.insert(active, reason)
+                else
+                    d.reasons[reason] = nil
+                end
+            end
+
+            local drawn = false
+            if C.CheaterDetect and C.CheaterTracer and #active > 0 and hrp then
+                local sp, onScreen = cam:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    d.line.From = bottom
+                    d.line.To = Vector2.new(sp.X, sp.Y)
+                    d.line.Visible = true
+                    d.txt.Text = "[SUS] " .. v.Name .. " (" .. table.concat(active, ", ") .. ")"
+                    d.txt.Position = Vector2.new(sp.X, sp.Y - 40)
+                    d.txt.Visible = true
+                    drawn = true
+                end
+            end
+            if not drawn then
+                d.line.Visible = false
+                d.txt.Visible = false
+            end
+        end
+    end
+end)
+
+makeTog("Cheater Detector", "Visuals", C.CheaterDetect, function(s) C.CheaterDetect = s end)
+makeTog("Cheater Tracer (Oranye)", "Visuals", C.CheaterTracer, function(s) C.CheaterTracer = s end)
+makeSlider("Speed Limit (studs/s)", "Visuals", 20, 120, C.CheaterSpeedLimit, function(v) C.CheaterSpeedLimit = v end)
+
+-- ==================== END CHEATER DETECTOR ====================
 print("[MOMO HUB V30] Loaded.")
