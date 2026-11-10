@@ -1649,4 +1649,183 @@ makeTog("Cheater Tracer (Oranye)", "Visuals", C.CheaterTracer, function(s) C.Che
 makeSlider("Speed Limit (studs/s)", "Visuals", 20, 120, C.CheaterSpeedLimit, function(v) C.CheaterSpeedLimit = v end)
 
 -- ==================== END CHEATER DETECTOR ====================
+-- ==================== CHEATER AURA + SPECTATE ====================
+C.CheaterAura = false
+C.CheaterAuraRange = 35
+C.CheaterSpectate = false
+
+local function cheaterIsFlagged(d)
+    if not d or not d.reasons then return false end
+    local now = os.clock()
+    for _, expiry in pairs(d.reasons) do
+        if expiry > now then return true end
+    end
+    return false
+end
+
+local function getFlaggedList()
+    local list = {}
+    if CD == nil then return list end
+    for v, d in pairs(CD) do
+        if v ~= LP and cheaterIsFlagged(d) then
+            local char = v.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                table.insert(list, {plr = v, hrp = hrp, hum = hum, d = d})
+            end
+        end
+    end
+    return list
+end
+
+-- ---------- AURA KHUSUS CHEATER ----------
+local auraLast = 0
+R.RenderStepped:Connect(function()
+    if not C.CheaterAura then return end
+    local now = os.clock()
+    if now - auraLast < 0.25 then return end
+    auraLast = now
+    local myChar = LP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    if not myHRP or not myHum or myHum.Health <= 0 then return end
+    local best = nil
+    local bestDist = C.CheaterAuraRange
+    for _, info in ipairs(getFlaggedList()) do
+        local dist = (info.hrp.Position - myHRP.Position).Magnitude
+        if dist <= bestDist then
+            bestDist = dist
+            best = info
+        end
+    end
+    if best then
+        pcall(function()
+            local tool = myChar:FindFirstChildOfClass("Tool")
+            if not tool then
+                local bpTool = LP:FindFirstChild("Backpack") and LP.Backpack:FindFirstChildOfClass("Tool")
+                if bpTool then
+                    myHum:EquipTool(bpTool)
+                    tool = myChar:FindFirstChildOfClass("Tool")
+                end
+            end
+            if tool then
+                tool:Activate()
+                local handle = tool:FindFirstChild("Handle")
+                if handle and firetouchinterest then
+                    firetouchinterest(handle, best.hrp, 0)
+                    firetouchinterest(handle, best.hrp, 1)
+                end
+            end
+        end)
+    end
+end)
+
+-- ---------- AUTO SPECTATE CHEATER ----------
+local specManual = nil
+local specCurrent = nil
+
+local function notifySpec(name)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Spectate Cheater",
+            Text = "Nonton: " .. name .. " (B = next)",
+            Duration = 3
+        })
+    end)
+end
+
+local function resetCamToSelf()
+    pcall(function()
+        local myHum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if myHum then
+            W.CurrentCamera.CameraSubject = myHum
+        end
+    end)
+end
+
+U.InputBegan:Connect(function(inp, gpe)
+    if gpe then return end
+    if not C.CheaterSpectate then return end
+    if inp.KeyCode ~= Enum.KeyCode.B then return end
+    local list = getFlaggedList()
+    if #list == 0 then return end
+    local idx = 1
+    if specCurrent then
+        for i, info in ipairs(list) do
+            if info.plr == specCurrent then
+                idx = (i % #list) + 1
+                break
+            end
+        end
+    end
+    specManual = list[idx].plr
+    specCurrent = specManual
+    W.CurrentCamera.CameraSubject = list[idx].hum
+    notifySpec(specManual.Name)
+end)
+
+R.RenderStepped:Connect(function()
+    if not C.CheaterSpectate then
+        if specCurrent then
+            specCurrent = nil
+            specManual = nil
+            resetCamToSelf()
+        end
+        return
+    end
+    local list = getFlaggedList()
+    if #list == 0 then
+        if specCurrent then
+            specCurrent = nil
+            specManual = nil
+            resetCamToSelf()
+        end
+        return
+    end
+    local targetInfo = nil
+    if specManual then
+        for _, info in ipairs(list) do
+            if info.plr == specManual then
+                targetInfo = info
+                break
+            end
+        end
+        if not targetInfo then specManual = nil end
+    end
+    if not targetInfo then
+        local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        local bestDist = math.huge
+        for _, info in ipairs(list) do
+            local dist = 0
+            if myHRP then dist = (info.hrp.Position - myHRP.Position).Magnitude end
+            if dist < bestDist then
+                bestDist = dist
+                targetInfo = info
+            end
+        end
+    end
+    if targetInfo then
+        if specCurrent ~= targetInfo.plr then
+            specCurrent = targetInfo.plr
+            notifySpec(specCurrent.Name)
+        end
+        pcall(function()
+            W.CurrentCamera.CameraSubject = targetInfo.hum
+        end)
+    end
+end)
+
+makeTog("Aura Khusus Cheater", "Combat", C.CheaterAura, function(s) C.CheaterAura = s end)
+makeSlider("Aura Range Cheater", "Combat", 10, 100, C.CheaterAuraRange, function(v) C.CheaterAuraRange = v end)
+makeTog("Spectate Cheater (Auto)", "Visuals", C.CheaterSpectate, function(s)
+    C.CheaterSpectate = s
+    if not s then
+        specManual = nil
+        specCurrent = nil
+        resetCamToSelf()
+    end
+end)
+
+-- ==================== END CHEATER AURA + SPECTATE ====================
 print("[MOMO HUB V30] Loaded.")
