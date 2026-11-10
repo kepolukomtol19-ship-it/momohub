@@ -1649,6 +1649,7 @@ makeTog("Cheater Tracer (Oranye)", "Visuals", C.CheaterTracer, function(s) C.Che
 makeSlider("Speed Limit (studs/s)", "Visuals", 20, 120, C.CheaterSpeedLimit, function(v) C.CheaterSpeedLimit = v end)
 
 -- ==================== END CHEATER DETECTOR ====================
+
 -- ==================== CHEATER AURA + SPECTATE ====================
 C.CheaterAura = false
 C.CheaterAuraRange = 35
@@ -1828,4 +1829,5 @@ makeTog("Spectate Cheater (Auto)", "Visuals", C.CheaterSpectate, function(s)
 end)
 
 -- ==================== END CHEATER AURA + SPECTATE ====================
+
 print("[MOMO HUB V30] Loaded.")
